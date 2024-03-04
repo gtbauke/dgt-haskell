@@ -1,25 +1,34 @@
 module Lib
-  ( createParserState,
+  ( runParser,
+    createParserState,
     parseChar,
-    runParser,
+    parseString,
   )
 where
 
-data ParserState i a e
-  = ParserState {sData :: i, sResult :: a, sIndex :: Int}
-  | ParserError {sData :: i, sError :: e, sIndex :: Int}
+data ParserState i a
+  = ParserState {sData :: i, sConsumedData :: i, sResult :: a, sIndex :: Int}
   deriving (Show)
 
-newtype Parser i a e = Parser {runParser :: ParserState i a e -> ParserState i a e}
+newtype Parser i a e = Parser {runParser :: ParserState i a -> Either e (ParserState i a)}
 
-createParserState :: i -> ParserState i a e
-createParserState input = ParserState {sData = input, sResult = undefined, sIndex = 0}
+createParserState :: i -> ParserState i a
+createParserState i = ParserState i i undefined 0
 
 parseChar :: Char -> Parser String Char String
-parseChar target = Parser $ \state ->
-  case sData state of
-    [] -> ParserError {sData = sData state, sError = "End of input", sIndex = sIndex state}
-    (c : cs) ->
-      if c == target
-        then ParserState {sData = cs, sResult = c, sIndex = sIndex state + 1}
-        else ParserError {sData = sData state, sError = "Expected " ++ [target], sIndex = sIndex state}
+parseChar expected = Parser $ \state ->
+  let input = sConsumedData state
+   in case input of
+        [] -> Left "No more input"
+        (c : cs) ->
+          if c == expected
+            then Right $ state {sConsumedData = cs, sResult = c, sIndex = sIndex state + 1}
+            else Left $ "Expected " ++ [expected] ++ " but got " ++ [c]
+
+parseString :: String -> Parser String String String
+parseString expected = Parser $ \state ->
+  let input = sConsumedData state
+      len = length expected
+   in if take len input == expected
+        then Right $ state {sConsumedData = drop len input, sResult = expected, sIndex = sIndex state + len}
+        else Left $ "Expected " ++ expected ++ " but got " ++ take len input
