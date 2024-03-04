@@ -25,6 +25,14 @@ parseChar expected = Parser $ \state ->
             then Right $ state {sConsumedData = cs, sResult = c, sIndex = sIndex state + 1}
             else Left $ "Expected " ++ [expected] ++ " but got " ++ [c]
 
+-- sequenceOf :: [Parser i a e] -> Parser i [a] e
+-- sequenceOf [] = Parser $ \state -> Right $ state {sResult = [], sIndex = sIndex state}
+-- sequenceOf (p:ps) = Parser $ \state -> case runParser p state of
+--   Left e -> Left e
+--   Right newState -> case runParser (sequenceOf ps) newState of
+--     Left e -> Left e
+--     Right finalState -> Right $ finalState {sResult = sResult newState : sResult finalState}
+
 parseString :: String -> Parser String String String
 parseString expected = Parser $ \state ->
   let input = sConsumedData state

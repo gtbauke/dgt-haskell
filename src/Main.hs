@@ -9,7 +9,8 @@ main = do
   case args of
     [fileName] -> do
       putStrLn $ "The file name is: " ++ fileName
-      putStrLn $ readFile fileName
+      file <- readFile fileName
+      putStrLn $ "The file contains: " ++ file
     _ -> do
       putStrLn "Usage: dtg <filename>"
 
