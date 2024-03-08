@@ -15,15 +15,15 @@ import Data.Bifunctor (first)
 
 newtype Parser a = Parser {runParser :: String -> [(a, String)]}
 
-instance Functor Parser where
-  fmap f (Parser p) = Parser $ \input -> map (first f) (p input)
+-- instance Functor Parser where
+--   fmap f (Parser p) = Parser $ \input -> map (first f) (p input)
 
-instance Applicative Parser where
-  pure x = Parser $ \input -> [(x, input)]
-  (Parser p1) <*> (Parser p2) = Parser $ \input -> do
-    (f, input') <- p1 input
-    (x, input'') <- p2 input'
-    return (f x, input'')
+-- instance Applicative Parser where
+--   pure x = Parser $ \input -> [(x, input)]
+--   (Parser p1) <*> (Parser p2) = Parser $ \input -> do
+--     (f, input') <- p1 input
+--     (x, input'') <- p2 input'
+--     return (f x, input'')
 
 charParser :: Char -> Parser Char
 charParser expected = Parser $ \case
