@@ -20,5 +20,6 @@ data BinaryOperator
 data Expression
   = IntegerExpression Int
   | FloatExpression Float
+  | IdentifierExpression String
   | BinaryExpression BinaryOperator Expression Expression
   deriving (Show)

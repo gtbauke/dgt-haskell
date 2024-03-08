@@ -8,7 +8,22 @@ intParser :: Parser Expression
 intParser = IntegerExpression . read <$> oneOrMore (choice (map charParser ['0' .. '9']))
 
 addParser :: Parser Expression
-addParser = BinaryExpression Plus <$> intParser <* zeroOrMore (charParser ' ') <*> (charParser '+' <* zeroOrMore (charParser ' ') *> intParser)
+addParser = BinaryExpression Plus <$> intParser <* zeroOrMore whitespaceParser <*> (charParser '+' <* zeroOrMore whitespaceParser *> intParser)
+
+whitespaceParser :: Parser Char
+whitespaceParser = choice (map charParser [' ', '\t'])
+
+newlineParser :: Parser Char
+newlineParser = choice (map charParser ['\n', '\r'])
+
+identifierParser :: Parser Expression
+identifierParser = IdentifierExpression <$> oneOrMore (choice (map charParser ['a' .. 'z'] ++ map charParser ['A' .. 'Z'] ++ [charParser '_']))
+
+lineParser :: Parser Expression
+lineParser = choice [addParser, identifierParser]
+
+programParser :: Parser [Expression]
+programParser = oneOrMore lineParser
 
 main :: IO ()
 main = do
@@ -18,7 +33,6 @@ main = do
       putStrLn $ "The file name is: " ++ fileName
       file <- readFile fileName
 
-      print $ runParser intParser file
-      print $ runParser addParser file
+      print $ runParser lineParser file
     _ -> do
       putStrLn "Usage: dtg <filename>"
