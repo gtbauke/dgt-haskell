@@ -274,4 +274,63 @@ runParser (oneOrMore (charParser 'h')) "hhhworld" -- ParserState {result = "hhh"
 
 ## Nossa AST, Tipos de Dados Algébricos e Type Classes
 
-Agora, já temos como combinar nossos _parsers_ de várias formas. Vamos começar a criar um _parser_ para nossa linguagem fictícia, mas antes disso, precisamos pensar em uma forma de representar nossa linguagem como uma árvore de sintaxe abstrata (AST). Vamos criar um novo módulo chamado `Lang` e, em seguida, vamos criar um novo tipo de dados que representa nossa linguagem:
+<!-- TODO: start with a simpler example (non recursive type) -->
+<!-- TODO: after that introduce the AST recursive example (without list types) -->
+<!-- TODO: explain type equivalence and other types of types (Power type -> functions) -->
+<!-- TODO: explain operations on types (Derivatives?) -->
+<!-- TODO: after that increment the type with CallExpression and FunctionExpression (use list types) -->
+
+Agora, que já temos como combinar nossos _parsers_ de várias formas. Vamos começar a criar um _parser_ para nossa linguagem fictícia, mas antes disso, precisamos pensar em uma forma de representar nossa linguagem como uma árvore de sintaxe abstrata (AST). Vamos criar um novo módulo chamado `Lang` e, em seguida, vamos criar um novo tipo de dados que representa nossa linguagem.
+
+Até aqui, já criamos algumas estruturas de dados diferentes, como `Parser` e `ParserState`, mas ainda não falamos sobre o que são tipos de dados algébricos (ADTs) e a teoria por trás deles. Em Haskell, tipos de dados algébricos são uma forma de criar novos tipos de dados a partir de tipos já existentes. Mas o que eles têm haver com álgebra? A resposta é que ADTs são uma forma de álgebra, isso significa que podemos definir representações numéricas e operações sobre essas representações. Cada tipo pode ser representado como o número de valores daquele determinado tipo. Por exemplo, o tipo `Bool` pode ser representado pelo número 2, pois pode assumir o valor `True` ou o valor `False`. Um tipo qualquer `a`, que possui possíveis `n` valores, pode ser representado pelo número `n`.
+
+Para entender isso melhor, vamos começar definindo nossa AST:
+
+```hs
+data Expression
+  = IntegerExpression Int
+  | FloatExpression Float
+  | StringExpression String
+  | BooleanExpression Bool
+  | Identifier String
+  | UnaryExpression String Expression
+  | BinaryExpression Expression String Expression
+  | IfExpression {condition :: Expression, trueBranch :: Expression, falseBranch :: Expression}
+  | FunctionExpression {params :: [String], body :: Expression}
+  | CallExpression {func :: Expression, args :: [Expression]}
+  deriving (Show)
+```
+
+Aqui estamos definindo o tipo `Expression`, que na teoria dos tipos de dados algébricos representa um "tipo soma". Isso porque `Expression` pode ser qualquer um dos valores definidos (`IntegerExpression`, `FloatExpression`, `StringExpression`, etc), ou seja, `Expression` pode assumir qualquer um desses valores, mas nunca mais de um ao mesmo tempo. Na álgebra dos tipos, isso é representado como uma soma dos possíveis valores de cada valor que o tipo `Expression` pode assumir:
+
+```hs
+IntegerExpression Int => Int
+FloatExpression Float => Float
+StringExpression String => String
+BooleanExpression Bool => Bool
+Identifier String => String
+UnaryExpression String Expression => String * Expression
+BinaryExpression Expression String Expression => Expression * String * Expression
+IfExpression {condition :: Expression, trueBranch :: Expression, falseBranch :: Expression} => Expression * Expression * Expression
+```
+
+Veja a diferença entre os tipos "soma" e "produto". Enquanto os tipos "soma" representam a soma da quantidade de possíveis valores que os tipos podem assumir, o tipo "produto" representa o produto das quantidades dos possíveis valores que os tipos podem assumir:
+
+```hs
+(Int, Bool) => Int * Bool -- Para cada valor de Int, temos um valor de Bool
+Bool = True | False => 1 + 1 = 2 -- Ou temos o valor True, ou o valor False, nunca os dois ao mesmo tempo
+```
+
+Assim, podemos montar uma equação para deduzir a quantidade de valores que o tipo `Expression` pode assumir:
+
+```hs
+Expression = Int + Float + String + Bool + String + String * Expression + Expression * String * Expression + Expression * Expression * Expression
+```
+
+Podemos rearranjar os termos da equação para encontrar o valor de `Expression`:
+
+<!-- TODO: implement parsers for language constructs -->
+<!-- TODO: show that those implementations can be improved by using type classes -->
+<!-- TODO: explain what is a functor, an applicative and a monad -->
+<!-- TODO: rewrite combinators and parser to use type classes -->
+<!-- TODO: conclude the tutorial -->

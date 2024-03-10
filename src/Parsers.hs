@@ -1,12 +1,15 @@
 {-# LANGUAGE LambdaCase #-}
 
-module Lib
+module Parsers
   ( charParser,
     stringParser,
     sequenceOf,
     choice,
     zeroOrMore,
     oneOrMore,
+    anyParser,
+    Parser (..),
+    ParserState (..),
   )
 where
 
@@ -55,3 +58,10 @@ oneOrMore p = Parser $ \input -> case runParser p input of
   ParserState {result = r, rest = rest'} -> case runParser (zeroOrMore p) rest' of
     ParserError _ -> ParserState {result = [r], rest = rest'}
     ParserState {result = rs, rest = rest''} -> ParserState {result = r : rs, rest = rest''}
+
+-- TODO: explain this parser in the tutorial text
+
+anyParser :: Parser Char
+anyParser = Parser $ \case
+  (x : xs) -> ParserState {result = x, rest = xs}
+  [] -> ParserError "Unexpected end of input"
