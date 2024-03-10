@@ -110,21 +110,168 @@ public abstract class Parser<T> {
 }
 ```
 
-## Nosso primeiro _parser_
+## Nosso primeiro parser
 
 Agora que podemos representar nossos _parsers_, vamos criar um _parser_ que consegue reconhecer apenas um única caractere, ou seja, dado uma string qualquer, ele consegue reconhecer o primeiro caractere e retornar o restante da string.
 
 ```hs
 charParser :: Char -> Parser Char
 charParser expected = Parser $ \input -> case input of
-  (x:xs) -> if x == expected then (x, xs) else ('', input)
-  _ -> ('', input)
+  (x:xs) -> if x == expected then (x, xs) else error "Unexpected character"
+  _ -> error "Unexpected end of input"
 ```
 
 Por enquanto não vamos nos preocupar com erros (mais para frente lidaremos com eles!). O _parser_ `charParser` recebe um caractere esperado e retorna um `Parser` que, dado uma string, se o primeiro caractere for igual ao caractere esperado, retorna o caractere e o restante da string. Caso contrário, retorna uma string vazia e a string original. Veja alguns exemplos de uso:
 
 ```hs
 runParser (charParser 'h') "hello" -- ('h', "ello")
-runParser (charParser 'h') "world" -- ('', "world")
+runParser (charParser 'h') "world" -- error "Unexpected character"
 runParser (charParser 'w') "world" -- ('w', "orld")
 ```
+
+## String parser
+
+Agora que podemos reconhecer um único caractere, vamos criar um _parser_ que consegue reconhecer uma sequência inteira de caracteres (uma string). Vamos criar nosso `stringParser` da seguinte forma:
+
+```hs
+stringParser :: String -> Parser String
+stringParser expected = Parser $ \input -> if expected `isPrefixOf` input then (expected, drop (length expected) input) else error "Unexpected string"
+```
+
+Aqui, estamos usando a função `isPrefixOf` (importada de `Data.List`) para verificar se nosso input começa com a string que esperamos. Caso positivo, retornamos a string esperada e o restante do input em uma tupla. Caso negativo, retornamos um erro. Veja alguns exemplos de uso:
+
+```hs
+runParser (stringParser "hello") "hello world" -- ("hello", " world")
+runParser (stringParser "hello") "world" -- error "Unexpected string"
+runParser (stringParser "world") "world" -- ("world", "")
+```
+
+## Combinando parsers
+
+Agora já temos _parsers_ suficientes para começarmos a combiná-los. Imagine que queremos criar um _parser_ que reconheça a string "hello" e, em seguia, a string "world". Para isso, precisamos combinar dois `stringParser` de alguma forma, mas como fazemos isso?
+
+Para isso, primeiro precisamos de um _parser_ para a string "hello" e, em seguida, no resultado do primeiro _parser_, aplicamos o segundo, que reconhecerá a string "world". Ou seja, precisamos de uma função que, dado uma lista de _parsers_ (uma lista porque queremos combinar qualquer número de _parsers_ e não apenas dois como no exemplo anterior), retorna um novo _parser_ que aplica sequencialmente cada _parser_ dessa lista e retorna o resultado final. Vamos chamar essa função de `sequenceOf`:
+
+```hs
+sequenceOf :: [Parser a] -> Parser [a]
+sequenceOf [] = Parser ([],)
+sequenceOf (p : ps) = Parser $ \input ->
+  let (x, input') = runParser p input
+      (xs, input'') = runParser (sequenceOf ps) input'
+   in (x : xs, input'')
+```
+
+Note que nessa implementação, estamos utilizando uma extensão da linguagem chamada `TupleSections`. Para habilitá-la, adicione a seguinte linha no início do arquivo `Parsers.hs`:
+
+```hs
+{-# LANGUAGE TupleSections #-}
+```
+
+Nossa função `sequenceOf` tem dois casos, um para lista vazia e outro para listas não vazias. No primeiro caso, retornamos um _parser_ que, dado uma string, retorna uma tupla com resultado vazio e o próprio input. No segundo caso, aplicamos o primeiro _parser_ da lista e chamamos a função `sequenceOf` recursivamente com o restante da lista no restante da string retornado na primeira aplicação da nossa função. No final, retornamos uma tupla com a lista de resultados e o restante da string. Veja alguns exemplos de uso:
+
+```hs
+runParser (sequenceOf [charParser 'h', charParser 'e', charParser 'l', charParser 'l', charParser 'o']) "hello world" -- ("hello", " world")
+runParser (sequenceOf [charParser 'h', charParser 'e', charParser 'l', charParser 'l', charParser 'o']) "world" -- error "Unexpected end of input"
+runParser (sequenceOf [stringParser "hello", stringParser "world"]) "hello world" -- (["hello", "world"], "")
+runParser (sequenceOf [stringParser "hello", stringParser "world"]) "world" -- error "Unexpected string"
+```
+
+Agora, vamos criar uma função capaz de aplicar um _parser_ e, caso ele falhe, aplicar outro _parser_, ou seja, dado uma lista de _parsers_, vamos retornar um _parser_ que aplica sequencialmente cada _parser_ da lista e retorna o resultado do primeiro que obteve sucesso. Antes de implementar essa função, precisamos saber quando nossos _parsers_ estão falhando. Até o momento, ignoramos os errors, mas agora eles são importantes para a lógica da nossa função. Para lidar com os erros, vamos alterar nosso tipo `Parser` e vamos introduzir um novo tipo `ParserState` que representa o estado, sucesso ou falha, de qualquer um de nossos _parsers_.
+
+Vamos começar com nosso tipo novo `ParserState`:
+
+```hs
+data ParserState a = ParserState {result :: a, rest :: String} | ParserError String
+  deriving (Show)
+```
+
+Aqui, `ParserState` tem dois possíveis valores, `ParserState` e `ParserError`, que representam, respectivamente, o sucesso e a falha de um _parser_. Para construir esse tipo, estamos utilizando tipos do "tipo soma". Para quem não está familiarizado com esse conceito, basicamente, estamos criando um tipo que pode ser ou um `ParserState` ou um `ParserError`, mas nunca os dois ao mesmo tempo. Na maioria das linguagens _mainstream_ não é possível construir tipos dessa forma, pois essas linguagens são limitadas a tipos do "tipo produto", como os `structs` ou `classes`. Em linguagens funcionais, é muito comum utilizarmos esse tipo de construção, uma vez que ela deixa nosso código muito mais expressivo e compreensível. Mais para frente nesse tutorial, vou explicar o porque dessas classes de tipos terem os nomes "soma" e "produto".
+
+Agora, vamos alterar nosso tipo `Parser` para que ele utilize `ParserState` ao invés de uma tupla:
+
+```hs
+newtype Parser a = Parser { runParser :: String -> ParserState a }
+```
+
+E agora, precisamos alterar nossas implementação das funções `charParser`, `stringParser` e `sequenceOf`:
+
+```hs
+charParser :: Char -> Parser Char
+charParser e = Parser $ \case
+  (x : xs) -> if x == e then ParserState {result = x, rest = xs} else ParserError "Unexpected character"
+  [] -> ParserError "Unexpected end of input"
+
+stringParser :: String -> Parser String
+stringParser expected = Parser $ \input ->
+  if expected `isPrefixOf` input
+    then ParserState {result = expected, rest = drop (length expected) input}
+    else ParserError "Unexpected string"
+
+sequenceOf :: [Parser a] -> Parser [a]
+sequenceOf [] = Parser $ \input -> ParserState {result = [], rest = input}
+sequenceOf (p : ps) = Parser $ \input -> case runParser p input of
+  ParserError e -> ParserError e
+  ParserState {result = r, rest = rest'} -> case runParser (sequenceOf ps) rest' of
+    ParserError e -> ParserError e
+    ParserState {result = rs, rest = rest''} -> ParserState {result = r : rs, rest = rest''}
+```
+
+Parece que nossas funções ficaram um pouco mais verbosas (será que há uma forma de reduzirmos essa verbosidade?), mas agora elas são capazes de lidar com erros. Vamos ver como ficaram nossos exemplos de uso:
+
+```hs
+runParser (sequenceOf [charParser 'h', charParser 'e', charParser 'l', charParser 'l', charParser 'o']) "hello world" -- ParserState {result = "hello", rest = " world"}
+runParser (sequenceOf [charParser 'h', charParser 'e', charParser 'l', charParser 'l', charParser 'o']) "world" -- ParserError "Unexpected end of input"
+runParser (sequenceOf [stringParser "hello", stringParser "world"]) "hello world" -- ParserError "Unexpected string"
+runParser (sequenceOf [stringParser "hello", stringParser " world"]) "hello world" -- ParserState {result = ["hello"," world"], rest = ""}
+```
+
+Com essa nova implementação do nosso tipo `Parser`, podemos criar a função `choice`:
+
+```hs
+choice :: [Parser a] -> Parser a
+choice [] = Parser $ \_ -> ParserError "No parsers to choose from"
+choice (p : ps) = Parser $ \input -> case runParser p input of
+  ParserError _ -> runParser (choice ps) input
+  x -> x
+```
+
+Se passarmos uma lista vazia para essa função, retornamos um _parser_ que ignora seu input e retorna um erro. Caso contrário, aplicamos o primeiro _parser_ da lista ao input e, caso ele falhe, aplicamos recursivamente a função `choice` ao restante da lista até que um _parser_ tenha sucesso. Veja alguns exemplos de uso:
+
+```hs
+runParser (choice [charParser 'h', charParser 'w']) "hello world" -- ParserState {result = 'h', rest = "ello world"}
+runParser (choice [charParser 'h', charParser 'w']) "world" -- ParserState {result = 'w', rest = "orld"}
+runParser (choice [charParser 'h', charParser 'w']) "ello world" -- ParserError "No parsers to choose from"
+```
+
+Nesse momento, podemos combinar `parser` de forma sequencial ou de forma alternativa. Agora, vamos criar mais duas funções que nos permitem aplicar um _parser_ zero ou mais vezes e uma ou mais vezes. Vamos chamar essas funções de `zeroOrMore` e `oneOrMore`, respectivamente:
+
+```hs
+zeroOrMore :: Parser a -> Parser [a]
+zeroOrMore p = Parser $ \input -> case runParser p input of
+  ParserError _ -> ParserState {result = [], rest = input}
+  x -> case runParser (zeroOrMore p) (rest x) of
+    ParserError _ -> ParserState {result = [result x], rest = rest x}
+    ParserState {result = rs, rest = rest'} -> ParserState {result = result x : rs, rest = rest'}
+
+oneOrMore :: Parser a -> Parser [a]
+oneOrMore p = Parser $ \input -> case runParser p input of
+  ParserError _ -> ParserError "Expected one or more"
+  ParserState {result = r, rest = rest'} -> case runParser (zeroOrMore p) rest' of
+    ParserError _ -> ParserState {result = [r], rest = rest'}
+    ParserState {result = rs, rest = rest''} -> ParserState {result = r : rs, rest = rest''}
+```
+
+A função `zeroOrMore` aplica um _parser_ zero ou mais vezes. Para isso, ela tenta aplicar o _parser_ no input, caso falhe, retorna o estado inicial em uma lista. Se não falhar, aplica recursivamente o _parser_ até que ele falhe e, em seguida, retorna o resultado em uma lista. A função `oneOrMore` é bem parecida, mas ela retorna um erro caso o _parser_ falhe na primeira aplicação. Veja alguns exemplos de uso:
+
+```hs
+runParser (zeroOrMore (charParser 'h')) "hello world" -- ParserState {result = "h", rest = "ello world"}
+runParser (zeroOrMore (charParser 'h')) "world" -- ParserState {result = "", rest = "world"}
+runParser (zeroOrMore (charParser 'h')) "hhhworld" -- ParserState {result = "hhh", rest = "world"}
+runParser (oneOrMore (charParser 'h')) "hello world" -- ParserState {result = "h", rest = "ello world"}
+runParser (oneOrMore (charParser 'h')) "world" -- ParserError "Expected one or more"
+runParser (oneOrMore (charParser 'h')) "hhhworld" -- ParserState {result = "hhh", rest = "world"}
+```
+
+## Nossa AST, Tipos de Dados Algébricos e Type Classes
+
+Agora, já temos como combinar nossos _parsers_ de várias formas. Vamos começar a criar um _parser_ para nossa linguagem fictícia, mas antes disso, precisamos pensar em uma forma de representar nossa linguagem como uma árvore de sintaxe abstrata (AST). Vamos criar um novo módulo chamado `Lang` e, em seguida, vamos criar um novo tipo de dados que representa nossa linguagem:

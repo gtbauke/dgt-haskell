@@ -1,25 +1,11 @@
-module Lang (Expression (..), BinaryOperator (..)) where
-
-data BinaryOperator
-  = Plus
-  | Minus
-  | Times
-  | Divide
-  | Modulo
-  | Power
-  | Equal
-  | NotEqual
-  | Less
-  | LessOrEqual
-  | Greater
-  | GreaterOrEqual
-  | And
-  | Or
-  deriving (Show)
+module Lang (Expression (..)) where
 
 data Expression
   = IntegerExpression Int
   | FloatExpression Float
-  | IdentifierExpression String
-  | BinaryExpression BinaryOperator Expression Expression
+  | StringExpression String
+  | BooleanExpression Bool
+  | Identifier String
+  | UnaryExpression String Expression
+  | BinaryExpression Expression String Expression
   deriving (Show)
