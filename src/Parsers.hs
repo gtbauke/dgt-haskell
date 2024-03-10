@@ -20,6 +20,48 @@ data ParserState a = ParserState {result :: a, rest :: String} | ParserError Str
 
 newtype Parser a = Parser {runParser :: String -> ParserState a}
 
+-- !: useful resource -> https://serokell.io/blog/parser-combinators-in-haskell
+
+{-
+-- TODO: explain the Functor, Applicative, Monad and Alternative? instances in the tutorial text
+-- TODO: I don't think that all these implementations are correct. I need to check them again.
+instance Functor ParserState where
+  fmap f (ParserState a rest) = ParserState (f a) rest
+  fmap _ (ParserError e) = ParserError e
+
+instance Applicative ParserState where
+  pure a = ParserState a ""
+
+  ParserState f _ <*> ParserState a rest' = ParserState (f a) rest'
+  ParserError e <*> _ = ParserError e
+  _ <*> ParserError e = ParserError e
+
+instance Monad ParserState where
+  return = pure
+
+  ParserState a _ >>= f = f a
+  ParserError e >>= _ = ParserError e
+
+instance Functor Parser where
+  fmap f (Parser p) = Parser $ \input -> case p input of
+    ParserState a rest' -> ParserState (f a) rest'
+    ParserError e -> ParserError e
+
+instance Applicative Parser where
+  pure a = Parser $ \input -> ParserState a input
+  Parser f <*> Parser a = Parser $ \input -> case f input of
+    ParserState f' rest' -> case a rest' of
+      ParserState a' rest'' -> ParserState (f' a') rest''
+      ParserError e -> ParserError e
+    ParserError e -> ParserError e
+
+instance Monad Parser where
+  return = pure
+  Parser a >>= f = Parser $ \input -> case a input of
+    ParserState a' rest' -> runParser (f a') rest'
+    ParserError e -> ParserError e
+-}
+
 charParser :: Char -> Parser Char
 charParser e = Parser $ \case
   (x : xs) -> if x == e then ParserState {result = x, rest = xs} else ParserError "Unexpected character"
@@ -31,6 +73,11 @@ stringParser expected = Parser $ \input ->
     then ParserState {result = expected, rest = drop (length expected) input}
     else ParserError "Unexpected string"
 
+{-
+stringParser' :: String -> Parser String
+stringParser' = traverse charParser
+-}
+
 sequenceOf :: [Parser a] -> Parser [a]
 sequenceOf [] = Parser $ \input -> ParserState {result = [], rest = input}
 sequenceOf (p : ps) = Parser $ \input -> case runParser p input of
@@ -38,6 +85,15 @@ sequenceOf (p : ps) = Parser $ \input -> case runParser p input of
   ParserState {result = r, rest = rest'} -> case runParser (sequenceOf ps) rest' of
     ParserError e -> ParserError e
     ParserState {result = rs, rest = rest''} -> ParserState {result = r : rs, rest = rest''}
+
+{-
+sequenceOf' :: [Parser a] -> Parser [a]
+sequenceOf' [] = Parser $ \input -> ParserState {result = [], rest = input}
+sequenceOf' (p : ps) = do
+  r <- p
+  rs <- sequenceOf' ps
+  return (r : rs)
+-}
 
 choice :: [Parser a] -> Parser a
 choice [] = Parser $ \_ -> ParserError "No parsers to choose from"
