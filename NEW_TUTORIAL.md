@@ -1,4 +1,4 @@
-# Entendendo Tipos de Dados Algébricos (ADTs) com Parser Combinators
+# Entendendo Tipos de Dados Algébricos (ADTs) e Type Classes com Parser Combinators
 
 Em linguagens funcionais, tipos de dados algébricas (ADTs) são a principal forma de representação de estruturas de dados. Por muito tempo, esse conceito ficou restrito a linguagens funcionais, mas com a popularização dos conceitos desse paradigma, muitas linguagens, como por exemplo [Rust](https://www.rust-lang.org/) passaram a adotar ADTs como uma forma de representar suas estruturas de dados.
 
@@ -476,7 +476,7 @@ class (Functor f) => Applicative f where
 
 Aqui, temos que para um tipo `f` ser uma instância de `Applicative`, ele também precisa ser uma instância de `Functor`. A função `pure` transforma um valor do tipo `a` em um valor do tipo `f a`. A função `<*>` aplica uma função que está dentro do contexto `f` em um valor que também está dentro do contexto `f`. Ou seja, a função `pure` tem como objetivo encapsular um valor dentro do contexto f, enquanto a função `<*>` tem como objetivo aplicar uma função que está dentro do contexto `f` em um valor que também está dentro do contexto `f`, retornando algo dentro do mesmo contexto `f`.
 
-Aqui, contexto está sendo usado para se referir aos valores internos a qualquer tipo paramétrico, onde o contexto seria o próprio tipo paramétrico. Vamos implementar a instância de `Applicative` para `Parser` e para `ParserState`:
+Contexto está sendo usado para se referir aos valores internos a qualquer tipo paramétrico, onde o contexto seria o próprio tipo paramétrico. Vamos implementar a instância de `Applicative` para `Parser` e para `ParserState`:
 
 ```hs
 instance Applicative ParserState where
@@ -623,57 +623,109 @@ Antes nossos combinators eram muito mais complexos, mas agora, com o uso de type
 
 ### Implementando Parser para expressões unárias, binárias e condicionais
 
-Agora que já podemos expressar parsers de forma mais simples, podemos implementar os parsers mais complexos da nossa linguagem: os parsers para expressões unárias e binárias e condicionais. Uma expressão unária é toda expressão da nossa linguagem que possui apenas um operador e um operando. Vamos começar implementando um parser para essa situação:
+Agora que já podemos expressar parsers de forma mais simples, podemos implementar os parsers mais complexos da nossa linguagem: os parsers para expressões unárias e binárias e condicionais. Vamos implementar o parser para expressões unárias e expressões binárias ao mesmo tempo, uam vez que vamos usar uma técnica conhecida como Recursive Descent Parsing para implementar esses parsers. A ideia é que, para implementar um parser para uma expressão binária, precisamos primeiro implementar um parser para uma expressão unária, que por sua vez precisa de um parser para uma expressão atômica, ou seja, cada nível superior da nossa árvore de expressões depende do nível inferior.
 
 ```hs
-unaryParser :: Parser Expression
-unaryParser = ExprUnary <$> unaryOperator <*> expressionParser
-  where
-    unaryOperator = choice' [Negate <$ charParser '-', Not <$ charParser '!']
-```
+orExpression :: Parser Expression
+orExpression = ExprBinary <$> andExpression <*> (Or <$ sequenceOf (map charParser "||")) <*> orExpression <|> andExpression
 
-Como comentado, uma expressão unária consiste em um operador seguido de um operando. Na nossa linguagem, o operador pode ser ou o caractere de negação (`-`) ou o caractere de negação lógica (`!`). O operando é qualquer expressão da nossa linguagem. Para implementar esse parser, utilizamos a função `choice'` para escolher entre os dois operadores possíveis e a função `expressionParser` para reconhecer o operando.
+andExpression :: Parser Expression
+andExpression = ExprBinary <$> equalityExpression <*> (And <$ sequenceOf (map charParser "&&")) <*> andExpression <|> equalityExpression
 
-Vamos, agora, reimplementar o parser para expressões binárias. No entanto, dessa vez, vamos separar a lógica em casos diferentes, um para cada nível de precedência dos operadores (termos, fatores, condições lógicas e comparações):
+equalityExpression :: Parser Expression
+equalityExpression = ExprBinary <$> comparisonExpression <*> (Eq <$ sequenceOf (map charParser "==") <|> Neq <$ sequenceOf (map charParser "!=")) <*> equalityExpression <|> comparisonExpression
 
-```hs
-binaryTermParser :: Parser Expression
-binaryTermParser =
-  ExprBinary <$> expressionParser <*> binaryOperator <*> expressionParser
-  where
-    binaryOperator = fromString <$> choice' (map stringParser ["+", "-"])
-    stringParser = sequenceOf . map charParser
+comparisonExpression :: Parser Expression
+comparisonExpression =
+  ExprBinary
+    <$> additionExpression
+    <*> ( Lt
+            <$ sequenceOf (map charParser "<")
+              <|> Lte
+            <$ sequenceOf (map charParser "<=")
+              <|> Gt
+            <$ sequenceOf (map charParser ">")
+              <|> Gte
+            <$ sequenceOf (map charParser ">=")
+        )
+    <*> comparisonExpression
+      <|> additionExpression
 
-binaryFactorParser :: Parser Expression
-binaryFactorParser =
-  ExprBinary <$> expressionParser <*> binaryOperator <*> expressionParser
-  where
-    binaryOperator = fromString <$> choice' (map stringParser ["*", "/"])
-    stringParser = sequenceOf . map charParser
+additionExpression :: Parser Expression
+additionExpression = ExprBinary <$> multiplicationExpression <*> (Add <$ charParser '+' <|> Sub <$ charParser '-') <*> additionExpression <|> multiplicationExpression
 
-binaryLogicParser :: Parser Expression
-binaryLogicParser =
-  ExprBinary <$> expressionParser <*> binaryOperator <*> expressionParser
-  where
-    binaryOperator = fromString <$> choice' (map stringParser ["&&", "||"])
-    stringParser = sequenceOf . map charParser
+multiplicationExpression :: Parser Expression
+multiplicationExpression = ExprBinary <$> unaryExpression <*> (Mul <$ charParser '*' <|> Div <$ charParser '/') <*> multiplicationExpression <|> unaryExpression
 
-binaryComparisonParser :: Parser Expression
-binaryComparisonParser =
-  ExprBinary <$> expressionParser <*> binaryOperator <*> expressionParser
-  where
-    binaryOperator = fromString <$> choice' (map stringParser ["==", "!=", "<", "<=", ">", ">="])
-    stringParser = sequenceOf . map charParser
+unaryExpression :: Parser Expression
+unaryExpression = ExprUnary <$> (Negate <$ charParser '-' <|> Not <$ sequenceOf (map charParser "!")) <*> unaryExpression <|> primaryExpression
+
+primaryExpression :: Parser Expression
+primaryExpression =
+  whitespaceParser
+    *> (  floatParser <|> intParser <|> boolParser <|> sequenceOf' (map charParser "(")
+           *> expressionParser
+           <* sequenceOf' (map charParser ")")
+       )
+    <* whitespaceParser
 
 binaryParser :: Parser Expression
-binaryParser = choice' [binaryTermParser, binaryFactorParser, binaryLogicParser, binaryComparisonParser]
+binaryParser = orExpression
 ```
 
-Para facilitar nossa vida, vamos alterar a definição do nosso `expressionParser`:
+O código já é comprido dessa maneira, imagina se não tivéssemos implementado as type classes `Functor`, `Applicative`, `Monad` e `Alternative`. Como o foco não é explicar como um parser funciona, não vou entrar em detalhes específicos dessas funções, mas elas funcionam exatamente da mesma forma que os outros parsers que implementamos anteriormente.
+
+Por fim, temos o parser para expressões condicionais. Para isso, vamos mudar a implementação da nossa função `expressionParser`:
 
 ```hs
 expressionParser :: Parser Expression
-expressionParser = whitespaceParser *> choice [floatParser, intParser, boolParser, unaryParser, binaryParser] <* whitespaceParser
+expressionParser = binaryParser
+
+ifParser :: Parser Expression
+ifParser = do
+  _ <- sequenceOf (map charParser "if")
+  condition <- expressionParser
+  _ <- sequenceOf (map charParser "then")
+  thenBranch <- expressionParser
+  _ <- sequenceOf (map charParser "else")
+
+  ExprIf condition thenBranch <$> expressionParser
 ```
 
-Agora, aceitamos qualquer expressão envolta de espaços em branco, os quais ignoramos e retornamos apenas a expressão.
+Aqui, utilizamos a notação `do` para encadear operações sequenciais. Primeiro, tentamos reconhecer a palavra "if". Se tivermos sucesso, tentamos reconhecer a condição da expressão condicional. Se tivermos sucesso, tentamos reconhecer a palavra "then". Se tivermos sucesso, tentamos reconhecer o ramo "then" da expressão condicional. Se tivermos sucesso, tentamos reconhecer a palavra "else". Se tivermos sucesso, tentamos reconhecer o ramo "else" da expressão condicional. Imagine como esse código ficaria sem type classes!
+
+Agora, podemos criar uma função que reconhece qualquer expressão da nossa linguagem:
+
+```hs
+anyExpression :: Parser Expression
+anyExpression = choice' [ifParser, binaryParser]
+```
+
+Aqui, utilizamos o combinador `choice'` para escolher entre os parsers `ifParser` e `binaryParser`. Se o parser `ifParser` falhar, tentamos o parser `binaryParser`. Se o parser `binaryParser` falhar, retornamos um erro. Apenas esses dois parsers são suficientes para reconhecer qualquer expressão da nossa linguagem, uma vez que as demais expressões estão codificadas na lógica do `binaryParser`. Vamos a alguns exemplos:
+
+```hs
+runParser anyExpression "41 + 84" -- ParserSuccess {_result = ExprBinary (ExprInt 41) Add (ExprInt 84), _rest = ""}
+runParser anyExpression "if 45 > 10 then 100 + 49 else 67.4 + 23"
+-- ParserSuccess {_result = ExprIf (ExprBinary (ExprInt 45) Gt (ExprInt 10)) (ExprBinary (ExprInt 100) Add (ExprInt 49)) (ExprBinary (ExprFloat 67.4) Add (ExprInt 23)), _rest = ""}
+```
+
+Utilizando a função que criamos anteriormente para transformar expressões em strings, temos:
+
+```hs
+if
+  45 Gt 10
+then
+  100 Add 49
+else
+  67.4 Add 23
+```
+
+## Conclusão
+
+Neste tutorial, utilizamos os parser combinators para entender como funcionam os tipos de dados algébricos, cuja ideia principal é a combinação de tipos mais simples para criar tipos mais complexos por meio de operações de soma e produto, e como funcionam as type classes, principalmente `Functor`, `Applicative`, `Monad` e `Alternative`. A ideia principal por trás desse conceito é agrupar comportamentos comuns para diferentes tipos de dados.
+
+A type class `Functor` define o comportamento de transformação de estruturas, a type class `Applicative` define o comportamento de aplicação de funções internas a estruturas a valores internos as mesmas estruturas, a type class `Monad` define o comportamento de encadeamento de operações sequenciais e dependentes e a type class `Alternative` define o comportamento de combinação de valores.
+
+Vimos como podemos usar essas type classes para simplificar a implementação de parsers, que são uma aplicação prática de tipos de dados algébricos. Combinando esses conceitos, conseguimos implementar parsers de forma muito mais simples e legível, uma vez que a lógica de aplicação de parsers está encapsulada nas próprias definições das type classes.
+
+O código completo desse tutorial pode ser encontrado no meu [repositório do GitHub](https://github.com/gtbauke/dgt-haskell/tree/main).

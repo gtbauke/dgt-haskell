@@ -13,12 +13,9 @@ module Lang
     floatParser',
     floatParser'',
     boolParser',
-    unaryParser,
-    binaryTermParser,
-    binaryFactorParser,
-    binaryLogicParser,
-    binaryComparisonParser,
     binaryParser,
+    ifParser,
+    anyExpression,
   )
 where
 
@@ -39,6 +36,7 @@ import Parsers
     choice',
     oneOrMore,
     sequenceOf,
+    sequenceOf',
     zeroOrMore,
   )
 
@@ -152,7 +150,7 @@ binaryExpressionParser = Parser $ \input -> case runParser expressionParser (cle
       ParserSuccess _ rest' -> rest'
 
 expressionParser :: Parser Expression
-expressionParser = whitespaceParser *> choice [floatParser, intParser, boolParser, unaryParser, binaryParser] <* whitespaceParser
+expressionParser = binaryParser
 
 whitespaceParser :: Parser String
 whitespaceParser = zeroOrMore (choice [charParser ' ', charParser '\n', charParser '\t'])
@@ -183,38 +181,61 @@ floatParser'' =
 boolParser' :: Parser Expression
 boolParser' = ExprBool <$> fmap (== "true") (sequenceOf (map charParser "true") <|> sequenceOf (map charParser "false"))
 
-unaryParser :: Parser Expression
-unaryParser = ExprUnary <$> unaryOperator <*> expressionParser
-  where
-    unaryOperator = choice' [Negate <$ charParser '-', Not <$ charParser '!']
+orExpression :: Parser Expression
+orExpression = ExprBinary <$> andExpression <*> (Or <$ sequenceOf (map charParser "||")) <*> orExpression <|> andExpression
 
-binaryTermParser :: Parser Expression
-binaryTermParser =
-  ExprBinary <$> expressionParser <*> binaryOperator <*> expressionParser
-  where
-    binaryOperator = fromString <$> choice' (map stringParser ["+", "-"])
-    stringParser = sequenceOf . map charParser
+andExpression :: Parser Expression
+andExpression = ExprBinary <$> equalityExpression <*> (And <$ sequenceOf (map charParser "&&")) <*> andExpression <|> equalityExpression
 
-binaryFactorParser :: Parser Expression
-binaryFactorParser =
-  ExprBinary <$> expressionParser <*> binaryOperator <*> expressionParser
-  where
-    binaryOperator = fromString <$> choice' (map stringParser ["*", "/"])
-    stringParser = sequenceOf . map charParser
+equalityExpression :: Parser Expression
+equalityExpression = ExprBinary <$> comparisonExpression <*> (Eq <$ sequenceOf (map charParser "==") <|> Neq <$ sequenceOf (map charParser "!=")) <*> equalityExpression <|> comparisonExpression
 
-binaryLogicParser :: Parser Expression
-binaryLogicParser =
-  ExprBinary <$> expressionParser <*> binaryOperator <*> expressionParser
-  where
-    binaryOperator = fromString <$> choice' (map stringParser ["&&", "||"])
-    stringParser = sequenceOf . map charParser
+comparisonExpression :: Parser Expression
+comparisonExpression =
+  ExprBinary
+    <$> additionExpression
+    <*> ( Lt
+            <$ sequenceOf (map charParser "<")
+              <|> Lte
+            <$ sequenceOf (map charParser "<=")
+              <|> Gt
+            <$ sequenceOf (map charParser ">")
+              <|> Gte
+            <$ sequenceOf (map charParser ">=")
+        )
+    <*> comparisonExpression
+      <|> additionExpression
 
-binaryComparisonParser :: Parser Expression
-binaryComparisonParser =
-  ExprBinary <$> expressionParser <*> binaryOperator <*> expressionParser
-  where
-    binaryOperator = fromString <$> choice' (map stringParser ["==", "!=", "<", "<=", ">", ">="])
-    stringParser = sequenceOf . map charParser
+additionExpression :: Parser Expression
+additionExpression = ExprBinary <$> multiplicationExpression <*> (Add <$ charParser '+' <|> Sub <$ charParser '-') <*> additionExpression <|> multiplicationExpression
+
+multiplicationExpression :: Parser Expression
+multiplicationExpression = ExprBinary <$> unaryExpression <*> (Mul <$ charParser '*' <|> Div <$ charParser '/') <*> multiplicationExpression <|> unaryExpression
+
+unaryExpression :: Parser Expression
+unaryExpression = ExprUnary <$> (Negate <$ charParser '-' <|> Not <$ sequenceOf (map charParser "!")) <*> unaryExpression <|> primaryExpression
+
+primaryExpression :: Parser Expression
+primaryExpression =
+  whitespaceParser
+    *> ( floatParser <|> intParser <|> boolParser <|> sequenceOf' (map charParser "(")
+           *> expressionParser
+           <* sequenceOf' (map charParser ")")
+       )
+    <* whitespaceParser
 
 binaryParser :: Parser Expression
-binaryParser = choice' [binaryTermParser, binaryFactorParser, binaryLogicParser, binaryComparisonParser]
+binaryParser = orExpression
+
+ifParser :: Parser Expression
+ifParser = do
+  _ <- sequenceOf (map charParser "if")
+  condition <- expressionParser
+  _ <- sequenceOf (map charParser "then")
+  thenBranch <- expressionParser
+  _ <- sequenceOf (map charParser "else")
+
+  ExprIf condition thenBranch <$> expressionParser
+
+anyExpression :: Parser Expression
+anyExpression = choice' [ifParser, binaryParser]
