@@ -440,18 +440,24 @@ Note que do jeito que implementamos as funções até agora, não conseguimos le
 
 Se você prestou bastante atenção nos trechos de código até aqui, percebeu que estamos realizando o mesmo procedimento em vários lugares. Primeiro testamos um parser, se obtivermos sucesso, continuamos nossas operações. Caso obtivermos um erro, retornamos esse erro. Nos parsers mais simples, isso não estava sendo um problema, mas nos mais complexos, como o `binaryExpressionParser` isso se torna um problema. Na nossa implementação, ainda não estamos levando em conta a precedência dos operadores, ou seja, nosso código precisa ser ainda mais complexo, mas escrever parsers dessa forma é muito complicado e propenso a erros.
 
-Felizmente, podemos usar de outra funcionalidade do Haskell para simplificar nossa vida: os `Type Classes`. Esse conceito nos permite definir comportamentos comuns para diferentes tipos de dados. Já usamos ao longo dos nossos exemplos a type class `Show`, que define o comportamento de tipos que podem ser convertidos para strings. No entanto, para nosso caso com os parsers, vamos precisar de type classes mais complexas: `Functor`, `Applicative` e `Monad`.
+Felizmente, podemos usar de outra funcionalidade do Haskell para simplificar nossa vida: os `Type Classes`. Esse conceito nos permite definir comportamentos comuns para diferentes tipos de dados. Já usamos ao longo dos nossos exemplos a type class `Show`, que define o comportamento de tipos que podem ser convertidos para strings.
+
+Para aqueles que estão familiarizados com conceitos de programação orientada à objetos, não confunda type classes com classes. Apesar do nome parecido, os conceitos são totalmente diferentes. Classes se aproximam mais do conceito de tipos de dados algébricos do tipo produto, enquanto type classes se aproximam mais do conceito de interfaces, apesar de não serem exatamente a mesma coisa.
+
+Ambos os conceitos prezam pelo agrupamento de lógicas comuns, no entanto, type classes não utilizam o sistema de hierarquia de classes que estamos acostumados em linguagens orientadas à objetos. Em Haskell, uma vez que um tipo é declarado como instância de uma type class, ele automaticamente recebe todas as funções definidas nessa type class. Em tempo de execução, está sendo chamada a função correta para o tipo concreto que está sendo utilizado. No mundo de orientação à objetos, as funções de uma interface estão vinculadas a interface, não ao tipo que implementa a interface.
+
+Essa distinção, apesar de pequena, tem um impacto gigantesco na forma como pensamos e escrevemos código. Em seguida, vamos discutir um pouco sobre quatro type classes muito importantes: `Functor`, `Applicative`, `Monad` e `Alternative`.
 
 ### Functor
 
-Vamos começar pela mais fácil. A Type Class `Functor` define um comportamento comum para todos os tipos paramétricos que podem ser transformados. Analisando a sua assinatura, temos:
+Vamos começar pela mais fácil. A Type Class `Functor` define um comportamento comum para todos os tipos paramétricos que podem ser transformados. Essa type class representa todos os tipos os quais podem ter sua estrutura convertida em outro tipo semelhante por meio uma função. Analisando a sua assinatura, temos:
 
 ```hs
 class Functor f where
   fmap :: (a -> b) -> f a -> f b
 ```
 
-Aqui, `f` é um tipo paramétrico, `a` e `b` são tipos quaisquer e `fmap` é uma função que transforma um valor do tipo `f a` em um valor do tipo `f b`. No nosso caso, `f` será o tipo `Parser`. Vamos implementar a instância de `Functor` para `Parser` e para `ParserState` (que também é um tipo paramétrico):
+Aqui, `f` é um tipo paramétrico, `a` e `b` são tipos quaisquer e `fmap` é uma função que transforma um valor do tipo `f a` em um valor do tipo `f b`. Para entender melhor, pense em uma lista de inteiros. Podemos transformar todos os inteiros da lista em strings, por exemplo. Estamos alterando a estrutura da lista, de uma lista de inteiros para uma lista de strings. Isso é o que a type class `Functor` nos permite fazer. No nosso caso, `f` será o tipo `Parser`. Vamos implementar a instância de `Functor` para `Parser` e para `ParserState` (que também é um tipo paramétrico):
 
 ```hs
 instance Functor Parser where
@@ -474,7 +480,7 @@ class (Functor f) => Applicative f where
   (<*>) :: f (a -> b) -> f a -> f b
 ```
 
-Aqui, temos que para um tipo `f` ser uma instância de `Applicative`, ele também precisa ser uma instância de `Functor`. A função `pure` transforma um valor do tipo `a` em um valor do tipo `f a`. A função `<*>` aplica uma função que está dentro do contexto `f` em um valor que também está dentro do contexto `f`. Ou seja, a função `pure` tem como objetivo encapsular um valor dentro do contexto f, enquanto a função `<*>` tem como objetivo aplicar uma função que está dentro do contexto `f` em um valor que também está dentro do contexto `f`, retornando algo dentro do mesmo contexto `f`.
+Aqui, temos que para um tipo `f` ser uma instância de `Applicative`, ele também precisa ser uma instância de `Functor`. A função `pure` transforma um valor do tipo `a` em um valor do tipo `f a`. A função `<*>` recebe uma função, encapsulada em um contexto, e aplica essa função ao valor interno que também está dentro do contexto `f`. Ou seja, a função `pure` tem como objetivo encapsular um valor dentro do contexto f, enquanto a função `<*>` tem como objetivo aplicar uma função que está dentro do contexto `f` em um valor que também está dentro do contexto `f`, retornando algo dentro do mesmo contexto `f`.
 
 Contexto está sendo usado para se referir aos valores internos a qualquer tipo paramétrico, onde o contexto seria o próprio tipo paramétrico. Vamos implementar a instância de `Applicative` para `Parser` e para `ParserState`:
 
