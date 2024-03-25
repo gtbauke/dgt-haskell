@@ -198,7 +198,9 @@ prettyAST = prettyAST' 0
 Essa função apenas transforma uma expressão em uma string, indentando cada nível da árvore para que seja mais fácil visualizar a estrutura da nossa árvore no terminal. Por exemplo:
 
 ```hs
-expr = ExprIf (ExprBinary Lte (ExprInt 9) (ExprInt 8)) (ExprFloat 9.4) (ExprUnary Negate (ExprInt 9))
+expr = ExprIf (ExprBinary Lte (ExprInt 9) (ExprInt 8))
+  (ExprFloat 9.4) (ExprUnary Negate (ExprInt 9))
+
 putStrLn $ prettyAST expr
 ```
 
@@ -258,8 +260,11 @@ Comparamos o primeiro caractere da entrada, com o caractere esperado. Se eles fo
 Podemos testar o funcionamento desse parser:
 
 ```hs
-charParser 'a' `runParser` "abc" -- ParserSuccess {_result = 'a', _rest = "bc"}
-charParser 'a' `runParser` "bcd" -- ParserError {_error = UnexpectedCharacter 'b', _input = "cd"}
+charParser 'a' `runParser` "abc"
+-- ParserSuccess {_result = 'a', _rest = "bc"}
+
+charParser 'a' `runParser` "bcd"
+-- ParserError {_error = UnexpectedCharacter 'b', _input = "cd"}
 ```
 
 ### Combinando parsers
@@ -279,8 +284,11 @@ sequenceOf (p : ps) = Parser $ \input -> case runParser p input of
 Se não passarmos nenhum parser, retornamos um resultado "vazio". Caso contrário, aplicamos o primeiro parser e, se ele for bem sucedido, aplicamos o restante dos parsers. Se algum dos parsers falhar, interrompemos a execução e retornamos o erro.
 
 ```hs
-runParser (sequenceOf [charParser 'a', charParser 'b', charParser 'c']) "abc" -- ParserSuccess {_result = "abc", _rest = ""}
-runParser (sequenceOf [charParser 'a', charParser 'b', charParser 'c']) "bcd" -- ParserError {_error = UnexpectedCharacter 'b', _input = "cd"}
+runParser (sequenceOf [charParser 'a', charParser 'b', charParser 'c']) "abc"
+-- ParserSuccess {_result = "abc", _rest = ""}
+
+runParser (sequenceOf [charParser 'a', charParser 'b', charParser 'c']) "bcd"
+-- ParserError {_error = UnexpectedCharacter 'b', _input = "cd"}
 ```
 
 Além de combinar parsers de forma sequencial, também precisamos de formas de combinar parsers de forma alternativa, ou seja, invés de retornar um erro se um parser falhar, tentamos o próximo parser até que um deles tenha sucesso ou todos falhem. Para isso, vamos criar uma função chamada `choice`:
@@ -296,8 +304,11 @@ choice (p : ps) = Parser $ \input -> case runParser p input of
 Aqui, se não passarmos nenhum parser, retornamos um erro. Caso contrário, aplicamos o primeiro parser e, se ele falhar, aplicamos o restante dos parsers. Se todos os parsers falharem, retornamos o erro do último parser.
 
 ```hs
-runParser (choice [charParser 'a', charParser 'b', charParser 'c']) "bcd" -- ParserSuccess {_result = 'b', _rest = "cd"}
-runParser (choice [charParser 'a', charParser 'b', charParser 'c']) "def" -- ParserError {_error = NoParsersToChooseFrom, _input = "def"}
+runParser (choice [charParser 'a', charParser 'b', charParser 'c']) "bcd"
+-- ParserSuccess {_result = 'b', _rest = "cd"}
+
+runParser (choice [charParser 'a', charParser 'b', charParser 'c']) "def"
+-- ParserError {_error = NoParsersToChooseFrom, _input = "def"}
 ```
 
 Além dessas duas operações, vamos precisar de uma forma de aplicar um mesmo parser repetidamente. Para isso, vamos criar duas funções `oneOrMore` e `zeroOrMore`, que aplicam um parser pelo menos uma vez e zero ou mais vezes, respectivamente:
@@ -326,55 +337,79 @@ Agora que já temos como combinar parser de formas diferentes, podemos implement
 
 ```hs
 intParser :: Parser Expression
-intParser = Parser $ \input -> case runParser (oneOrMore (choice (map charParser ['0' .. '9']))) input of
-  ParserError _ _ -> ParserError {_error = FailedToParseInt, _input = input}
-  ParserSuccess digits rest -> ParserSuccess {_result = ExprInt (read digits), _rest = rest}
+intParser = Parser $ \input ->
+  case runParser (oneOrMore (choice (map charParser ['0' .. '9']))) input of
+    ParserError _ _ -> ParserError {_error = FailedToParseInt, _input = input}
+    ParserSuccess digits rest -> ParserSuccess {_result = ExprInt (read digits), _rest = rest}
 ```
 
 A parte principal dessa função é a expressão `oneOrMore (choice (map charParser ['0'..'9']))`, pois é aqui que estamos criando a combinação de todos os parsers que reconhecem caracteres numéricos. Se aplicarmos esse parser em uma string que contém apenas números, ele irá retornar a expressão inteira correspondente. Caso contrário, ele retornará um erro.
 
 ```hs
-runParser intParser "9849" -- ParserSuccess {_result = ExprInt 9849, _rest = ""}
-runParser intParser "98.49" -- ParserSuccess {_result = ExprInt 98, _rest = ".49"}
-runParser intParser "no" -- ParserError {_error = FailedToParseInt, _input = "no"}
+runParser intParser "9849"
+-- ParserSuccess {_result = ExprInt 9849, _rest = ""}
+
+runParser intParser "98.49"
+-- ParserSuccess {_result = ExprInt 98, _rest = ".49"}
+
+runParser intParser "no"
+-- ParserError {_error = FailedToParseInt, _input = "no"}
 ```
 
 O parser para números de ponto flutuante é bem parecido, mas agora também precisamos lidar com a parte decimal do número:
 
 ```hs
 floatParser :: Parser Expression
-floatParser = Parser $ \input -> case runParser (oneOrMore (choice (map charParser ['0' .. '9']))) input of
-  ParserError _ _ -> ParserError {_error = FailedToParseFloat, _input = input}
-  ParserSuccess digits rest -> case runParser (charParser '.') rest of
-    ParserError _ _ -> ParserError {_error = FailedToParseFloat, _input = rest}
-    ParserSuccess _ rest' -> case runParser (oneOrMore (choice (map charParser ['0' .. '9']))) rest' of
-      ParserError _ _ -> ParserError {_error = FailedToParseFloat, _input = rest'}
-      ParserSuccess digits' rest'' -> ParserSuccess {_result = ExprFloat (read (digits ++ "." ++ digits')), _rest = rest''}
+floatParser = Parser $ \input ->
+  case runParser (oneOrMore (choice (map charParser ['0' .. '9']))) input of
+    ParserError _ _ -> ParserError {_error = FailedToParseFloat, _input = input}
+    ParserSuccess digits rest -> case runParser (charParser '.') rest of
+      ParserError _ _ -> ParserError {_error = FailedToParseFloat, _input = rest}
+      ParserSuccess _ rest' ->
+        case runParser (oneOrMore (choice (map charParser ['0' .. '9']))) rest' of
+          ParserError _ _ -> ParserError {_error = FailedToParseFloat, _input = rest'}
+          ParserSuccess digits' rest'' -> ParserSuccess {
+            _result = ExprFloat (read (digits ++ "." ++ digits')),
+            _rest = rest''}
 ```
 
 O código ficou um pouco mais complexo, mas a ideia é a mesma. Primeiro, tentamos reconhecer a parte inteira do número. Se tivermos sucesso, tentamos reconhecer o ponto decimal. Se tivermos sucesso, tentamos reconhecer a parte decimal do número. Se tivermos sucesso, retornamos o número de ponto flutuante correspondente. Caso contrário, retornamos um erro.
 
 ```hs
-runParser floatParser "89.45" -- ParserSuccess {_result = ExprFloat 89.45, _rest = ""}
-runParser floatParser "89" -- ParserError {_error = FailedToParseFloat, _input = ""}
-runParser floatParser "89." -- ParserError {_error = FailedToParseFloat, _input = ""}
-runParser floatParser "89.4a" -- ParserSuccess {_result = ExprFloat 89.4, _rest = "a"}
+runParser floatParser "89.45"
+-- ParserSuccess {_result = ExprFloat 89.45, _rest = ""}
+
+runParser floatParser "89"
+-- ParserError {_error = FailedToParseFloat, _input = ""}
+
+runParser floatParser "89."
+-- ParserError {_error = FailedToParseFloat, _input = ""}
+
+runParser floatParser "89.4a"
+-- ParserSuccess {_result = ExprFloat 89.4, _rest = "a"}
 ```
 
 Para expressões booleanas, precisamos apenas reconhecer as palavras "true" e "false". Para isso, combinaremos, para cada palavra, um `charParser` para cada caractere sequencialmente e, depois, combinaremos os resultados de cada parser de forma alternativa:
 
 ```hs
 boolParser :: Parser Expression
-boolParser = Parser $ \input -> case runParser (choice [trueParser, falseParser]) input of
-  ParserError _ _ -> ParserError {_error = FailedToParseBool, _input = input}
-  ParserSuccess result rest -> ParserSuccess {_result = ExprBool (result == "true"), _rest = rest}
+boolParser = Parser $ \input ->
+  case runParser (choice [trueParser, falseParser]) input of
+    ParserError _ _ -> ParserError {_error = FailedToParseBool, _input = input}
+    ParserSuccess result rest ->
+      ParserSuccess {_result = ExprBool (result == "true"), _rest = rest}
   where
     trueParser = sequenceOf (map charParser "true")
     falseParser = sequenceOf (map charParser "false")
 
-runParser boolParser "true" -- ParserSuccess {_result = ExprBool True, _rest = ""}
-runParser boolParser "false" -- ParserSuccess {_result = ExprBool False, _rest = ""}
-runParser boolParser "tru" -- ParserError {_error = FailedToParseBool, _input = "tru"}
+runParser boolParser "true"
+-- ParserSuccess {_result = ExprBool True, _rest = ""}
+
+runParser boolParser "false"
+-- ParserSuccess {_result = ExprBool False, _rest = ""}
+
+runParser boolParser "tru"
+-- ParserError {_error = FailedToParseBool, _input = "tru"}
 ```
 
 Agora que temos os parsers mais simples da nossa linguagem feitos, podemos implementar os parsers para as operações unárias, binárias e condicionais. Vamos começar com as operações binárias. Um parser para operação binária, `binaryExpressionParser`, é um parser que reconhece uma expressão, um operador binário e outra expressão de forma sequencial, retornando um erro caso qualquer etapa falhe. Para isso, vamos, primeiro, criar um parser que represente qualquer expressão da nossa linguagem:
@@ -394,10 +429,12 @@ binaryExpressionParser = Parser $ \input -> case runParser expressionParser inpu
     ParserError _ _ -> ParserSuccess {_result = expr1, _rest = rest}
     ParserSuccess op rest' -> case runParser expressionParser rest' of
       ParserError _ _ -> ParserError {_error = FailedToParseExpression, _input = rest'}
-      ParserSuccess expr2 rest'' -> ParserSuccess {_result = ExprBinary (fromString op) expr1 expr2, _rest = rest''}
+      ParserSuccess expr2 rest'' ->
+        ParserSuccess {_result = ExprBinary (fromString op) expr1 expr2, _rest = rest''}
   where
     stringParser = sequenceOf . map charParser
-    binaryOperator = choice (map stringParser ["+", "-", "*", "/", "&&", "||", "==", "!=", "<", "<=", ">", ">="])
+    binaryOperator = choice (map stringParser ["+", "-", "*", "/", "&&", "||",
+      "==", "!=", "<", "<=", ">", ">="])
 ```
 
 Esse parser é um pouco mais complexo, mas segue a mesma ideia dos outros. Primeiro tentamos reconhecer uma expressão. Se tivermos sucesso, tentamos reconhecer um operador binário. Se tivermos sucesso, tentamos reconhecer outra expressão. Se tivermos sucesso, retornamos a expressão binária correspondente. Caso contrário, retornamos um erro. Para reconhecer o operador binário, precisamos de mais duas funções `mapParser` e `fromString`. A primeira faz exatamente a mesma coisa que a função `map` do Haskell, mas aplicada a parsers. A segunda é uma função que transforma uma string em um valor do tipo `BinaryOp`:
@@ -441,10 +478,12 @@ binaryExpressionParser = Parser $ \input -> case runParser expressionParser (cle
     ParserError _ _ -> ParserError {_error = FailedToParseExpression, _input = clean rest}
     ParserSuccess op rest' -> case runParser expressionParser (clean rest') of
       ParserError _ _ -> ParserError {_error = FailedToParseExpression, _input = clean rest'}
-      ParserSuccess expr2 rest'' -> ParserSuccess {_result = ExprBinary expr1 (fromString op) expr2, _rest = rest''}
+      ParserSuccess expr2 rest'' ->
+        ParserSuccess {_result = ExprBinary expr1 (fromString op) expr2, _rest = rest''}
   where
     stringParser = sequenceOf . map charParser
-    binaryOperator = choice (map stringParser ["+", "-", "*", "/", "&&", "||", "==", "!=", "<", "<=", ">", ">="])
+    binaryOperator = choice (map stringParser ["+", "-", "*", "/", "&&", "||",
+      "==", "!=", "<", "<=", ">", ">="])
     clean val = case runParser whitespaceParser val of
       ParserError _ _ -> val
       ParserSuccess _ rest' -> rest'
@@ -453,8 +492,11 @@ binaryExpressionParser = Parser $ \input -> case runParser expressionParser (cle
 Agora, temos essa função `clean` que recebe uma string e remove todos os espaços em branco precedentes. Usamos essa função antes de aplicar qualquer parser. Se tentarmos aplicar esse parser em uma string que contém uma expressão binária válida, ele irá retornar a expressão correspondente. Caso contrário, retornará um erro.
 
 ```hs
-runParser binaryExpressionParser "5.67 + 9" -- ParserSuccess {_result = ExprBinary Add (ExprFloat 5.67) (ExprInt 9), _rest = ""}
-runParser binaryExpressionParser "8" -- ParserError {_error = FailedToParseExpression, _input = ""}
+runParser binaryExpressionParser "5.67 + 9"
+-- ParserSuccess {_result = ExprBinary Add (ExprFloat 5.67) (ExprInt 9), _rest = ""}
+
+runParser binaryExpressionParser "8"
+-- ParserError {_error = FailedToParseExpression, _input = ""}
 ```
 
 Note que do jeito que implementamos as funções até agora, não conseguimos levar em consideração a precedência de operadores, nem a precedência das próprias construções da linguagem. Faremos isso mais a frente, quando facilitarmos como escrevemos os parsers.
@@ -555,7 +597,8 @@ As instâncias podem parecer pequenas, mas aqui está a mágica. Veja na impleme
 
 ```hs
 intParser' :: Parser Expression
-intParser' = ExprInt <$> fmap (read :: String -> Int) (oneOrMore (choice (map charParser ['0' .. '9'])))
+intParser' = ExprInt <$> fmap (read :: String -> Int)
+  (oneOrMore (choice (map charParser ['0' .. '9'])))
 
 floatParser' :: Parser Expression
 floatParser' =
@@ -629,7 +672,8 @@ Com essa nova definição, podemos implementar o parser para expressões boolean
 
 ```hs
 boolParser' :: Parser Expression
-boolParser' = ExprBool <$> fmap (== "true") (sequenceOf (map charParser "true") <|> sequenceOf (map charParser "false"))
+boolParser' = ExprBool <$>
+  fmap (== "true") (sequenceOf (map charParser "true") <|> sequenceOf (map charParser "false"))
 ```
 
 Além disso, podemos simplificar nossos combinators `sequenceOf`, `choice`, `zeroOrMore` e `oneOrMore`:
@@ -673,7 +717,8 @@ equalityExpression :: Parser Expression
 equalityExpression =
   ExprBinary
     <$> comparisonExpression
-    <*> (Eq <$ sequenceOf (map charParser "==") <|> Neq <$ sequenceOf (map charParser "!="))
+    <*> (Eq <$ sequenceOf (map charParser "==")
+      <|> Neq <$ sequenceOf (map charParser "!="))
     <*> equalityExpression <|> comparisonExpression
 
 comparisonExpression :: Parser Expression
@@ -759,7 +804,9 @@ anyExpression = choice' [ifParser, binaryParser]
 Aqui, utilizamos o combinador `choice'` para escolher entre os parsers `ifParser` e `binaryParser`. Se o parser `ifParser` falhar, tentamos o parser `binaryParser`. Se o parser `binaryParser` falhar, retornamos um erro. Apenas esses dois parsers são suficientes para reconhecer qualquer expressão da nossa linguagem, uma vez que as demais expressões estão codificadas na lógica do `binaryParser`. Vamos a alguns exemplos:
 
 ```hs
-runParser anyExpression "41 + 84" -- ParserSuccess {_result = ExprBinary (ExprInt 41) Add (ExprInt 84), _rest = ""}
+runParser anyExpression "41 + 84"
+-- ParserSuccess {_result = ExprBinary (ExprInt 41) Add (ExprInt 84), _rest = ""}
+
 runParser anyExpression "if 45 > 10 then 100 + 49 else 67.4 + 23"
 -- ParserSuccess {_result = ExprIf (ExprBinary (ExprInt 45) Gt (ExprInt 10))
 -- (ExprBinary (ExprInt 100) Add (ExprInt 49)) (ExprBinary (ExprFloat 67.4) Add (ExprInt 23)), _rest = ""}
