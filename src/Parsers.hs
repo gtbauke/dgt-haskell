@@ -6,6 +6,10 @@ module Parsers
     choice,
     zeroOrMore,
     oneOrMore,
+    zeroOrMore',
+    oneOrMore',
+    sequenceOf',
+    choice',
     Parser (..),
     ParserState (..),
     ParserError (..),
@@ -13,7 +17,7 @@ module Parsers
   )
 where
 
-import Control.Applicative (Alternative (..))
+import Control.Applicative (Alternative (..), asum)
 
 newtype Parser a = Parser {runParser :: String -> ParserState a}
 
@@ -50,11 +54,17 @@ sequenceOf (p : ps) = Parser $ \input -> case runParser p input of
     ParserError e i -> ParserError e i
     ParserSuccess rs rest'' -> ParserSuccess (r : rs) rest''
 
+sequenceOf' :: [Parser a] -> Parser [a]
+sequenceOf' = sequenceA
+
 choice :: [Parser a] -> Parser a
 choice [] = Parser $ \input -> ParserError {_error = NoParsersToChooseFrom, _input = input}
 choice (p : ps) = Parser $ \input -> case runParser p input of
   ParserError _ _ -> runParser (choice ps) input
   x -> x
+
+choice' :: [Parser a] -> Parser a
+choice' = asum
 
 zeroOrMore :: Parser a -> Parser [a]
 zeroOrMore p = Parser $ \input -> case runParser p input of
@@ -63,12 +73,18 @@ zeroOrMore p = Parser $ \input -> case runParser p input of
     ParserError _ _ -> ParserSuccess {_result = [_result x], _rest = _rest x}
     ParserSuccess rs rest' -> ParserSuccess (_result x : rs) rest'
 
+zeroOrMore' :: Parser a -> Parser [a]
+zeroOrMore' = many
+
 oneOrMore :: Parser a -> Parser [a]
 oneOrMore p = Parser $ \input -> case runParser p input of
   ParserError _ _ -> ParserError {_error = UnexpectedEndOfInput, _input = input}
   ParserSuccess r rest' -> case runParser (zeroOrMore p) rest' of
     ParserError _ _ -> ParserSuccess {_result = [r], _rest = rest'}
     ParserSuccess rs rest'' -> ParserSuccess (r : rs) rest''
+
+oneOrMore' :: Parser a -> Parser [a]
+oneOrMore' = some
 
 -- Utility
 mapParser :: (a -> b) -> Parser a -> Parser b

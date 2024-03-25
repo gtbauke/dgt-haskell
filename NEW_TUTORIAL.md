@@ -111,7 +111,7 @@ data Expression = ExprInt Int
                 | ExprFloat Float
                 | ExprBool Bool
                 | ExprUnary UnaryOp Expression
-                | ExprBinary BinaryOp Expression Expression
+                | ExprBinary Expression BinaryOp Expression
                 | ExprIf Expression Expression Expression
                 deriving (Show)
 ```
@@ -418,7 +418,7 @@ binaryExpressionParser = Parser $ \input -> case runParser expressionParser (cle
     ParserError _ _ -> ParserError {_error = FailedToParseExpression, _input = clean rest}
     ParserSuccess op rest' -> case runParser expressionParser (clean rest') of
       ParserError _ _ -> ParserError {_error = FailedToParseExpression, _input = clean rest'}
-      ParserSuccess expr2 rest'' -> ParserSuccess {_result = ExprBinary (fromString op) expr1 expr2, _rest = rest''}
+      ParserSuccess expr2 rest'' -> ParserSuccess {_result = ExprBinary expr1 (fromString op) expr2, _rest = rest''}
   where
     stringParser = sequenceOf . map charParser
     binaryOperator = choice (map stringParser ["+", "-", "*", "/", "&&", "||", "==", "!=", "<", "<=", ">", ">="])
@@ -602,3 +602,78 @@ Com essa nova definição, podemos implementar o parser para expressões boolean
 boolParser' :: Parser Expression
 boolParser' = ExprBool <$> fmap (== "true") (sequenceOf (map charParser "true") <|> sequenceOf (map charParser "false"))
 ```
+
+Além disso, podemos simplificar nossos combinators `sequenceOf`, `choice`, `zeroOrMore` e `oneOrMore`:
+
+```hs
+sequenceOf' :: [Parser a] -> Parser [a]
+sequenceOf' = sequenceA
+
+choice' :: [Parser a] -> Parser a
+choice' = asum
+
+zeroOrMore' :: Parser a -> Parser [a]
+zeroOrMore' = many
+
+oneOrMore' :: Parser a -> Parser [a]
+oneOrMore' = some
+```
+
+Antes nossos combinators eram muito mais complexos, mas agora, com o uso de type classes, conseguimos simplificar bastante nossa implementação, uma vez que a lógica que repetíamos em vários lugares está encapsulada nas próprias definições das type classes.
+
+### Implementando Parser para expressões unárias, binárias e condicionais
+
+Agora que já podemos expressar parsers de forma mais simples, podemos implementar os parsers mais complexos da nossa linguagem: os parsers para expressões unárias e binárias e condicionais. Uma expressão unária é toda expressão da nossa linguagem que possui apenas um operador e um operando. Vamos começar implementando um parser para essa situação:
+
+```hs
+unaryParser :: Parser Expression
+unaryParser = ExprUnary <$> unaryOperator <*> expressionParser
+  where
+    unaryOperator = choice' [Negate <$ charParser '-', Not <$ charParser '!']
+```
+
+Como comentado, uma expressão unária consiste em um operador seguido de um operando. Na nossa linguagem, o operador pode ser ou o caractere de negação (`-`) ou o caractere de negação lógica (`!`). O operando é qualquer expressão da nossa linguagem. Para implementar esse parser, utilizamos a função `choice'` para escolher entre os dois operadores possíveis e a função `expressionParser` para reconhecer o operando.
+
+Vamos, agora, reimplementar o parser para expressões binárias. No entanto, dessa vez, vamos separar a lógica em casos diferentes, um para cada nível de precedência dos operadores (termos, fatores, condições lógicas e comparações):
+
+```hs
+binaryTermParser :: Parser Expression
+binaryTermParser =
+  ExprBinary <$> expressionParser <*> binaryOperator <*> expressionParser
+  where
+    binaryOperator = fromString <$> choice' (map stringParser ["+", "-"])
+    stringParser = sequenceOf . map charParser
+
+binaryFactorParser :: Parser Expression
+binaryFactorParser =
+  ExprBinary <$> expressionParser <*> binaryOperator <*> expressionParser
+  where
+    binaryOperator = fromString <$> choice' (map stringParser ["*", "/"])
+    stringParser = sequenceOf . map charParser
+
+binaryLogicParser :: Parser Expression
+binaryLogicParser =
+  ExprBinary <$> expressionParser <*> binaryOperator <*> expressionParser
+  where
+    binaryOperator = fromString <$> choice' (map stringParser ["&&", "||"])
+    stringParser = sequenceOf . map charParser
+
+binaryComparisonParser :: Parser Expression
+binaryComparisonParser =
+  ExprBinary <$> expressionParser <*> binaryOperator <*> expressionParser
+  where
+    binaryOperator = fromString <$> choice' (map stringParser ["==", "!=", "<", "<=", ">", ">="])
+    stringParser = sequenceOf . map charParser
+
+binaryParser :: Parser Expression
+binaryParser = choice' [binaryTermParser, binaryFactorParser, binaryLogicParser, binaryComparisonParser]
+```
+
+Para facilitar nossa vida, vamos alterar a definição do nosso `expressionParser`:
+
+```hs
+expressionParser :: Parser Expression
+expressionParser = whitespaceParser *> choice [floatParser, intParser, boolParser, unaryParser, binaryParser] <* whitespaceParser
+```
+
+Agora, aceitamos qualquer expressão envolta de espaços em branco, os quais ignoramos e retornamos apenas a expressão.
