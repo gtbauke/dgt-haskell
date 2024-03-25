@@ -656,13 +656,25 @@ Agora que já podemos expressar parsers de forma mais simples, podemos implement
 
 ```hs
 orExpression :: Parser Expression
-orExpression = ExprBinary <$> andExpression <*> (Or <$ sequenceOf (map charParser "||")) <*> orExpression <|> andExpression
+orExpression =
+  ExprBinary
+    <$> andExpression
+    <*> (Or <$ sequenceOf (map charParser "||"))
+    <*> orExpression <|> andExpression
 
 andExpression :: Parser Expression
-andExpression = ExprBinary <$> equalityExpression <*> (And <$ sequenceOf (map charParser "&&")) <*> andExpression <|> equalityExpression
+andExpression =
+  ExprBinary
+    <$> equalityExpression
+    <*> (And <$ sequenceOf (map charParser "&&"))
+    <*> andExpression <|> equalityExpression
 
 equalityExpression :: Parser Expression
-equalityExpression = ExprBinary <$> comparisonExpression <*> (Eq <$ sequenceOf (map charParser "==") <|> Neq <$ sequenceOf (map charParser "!=")) <*> equalityExpression <|> comparisonExpression
+equalityExpression =
+  ExprBinary
+    <$> comparisonExpression
+    <*> (Eq <$ sequenceOf (map charParser "==") <|> Neq <$ sequenceOf (map charParser "!="))
+    <*> equalityExpression <|> comparisonExpression
 
 comparisonExpression :: Parser Expression
 comparisonExpression =
@@ -681,18 +693,32 @@ comparisonExpression =
       <|> additionExpression
 
 additionExpression :: Parser Expression
-additionExpression = ExprBinary <$> multiplicationExpression <*> (Add <$ charParser '+' <|> Sub <$ charParser '-') <*> additionExpression <|> multiplicationExpression
+additionExpression =
+  ExprBinary
+    <$> multiplicationExpression
+    <*> (Add <$ charParser '+' <|> Sub <$ charParser '-')
+    <*> additionExpression <|> multiplicationExpression
 
 multiplicationExpression :: Parser Expression
-multiplicationExpression = ExprBinary <$> unaryExpression <*> (Mul <$ charParser '*' <|> Div <$ charParser '/') <*> multiplicationExpression <|> unaryExpression
+multiplicationExpression =
+  ExprBinary
+    <$> unaryExpression
+    <*> (Mul <$ charParser '*' <|> Div <$ charParser '/')
+    <*> multiplicationExpression <|> unaryExpression
 
 unaryExpression :: Parser Expression
-unaryExpression = ExprUnary <$> (Negate <$ charParser '-' <|> Not <$ sequenceOf (map charParser "!")) <*> unaryExpression <|> primaryExpression
+unaryExpression =
+  ExprUnary
+    <$> ( Negate
+            <$ charParser '-' <|> Not
+            <$ sequenceOf (map charParser "!")
+        )
+    <*> unaryExpression <|> primaryExpression
 
 primaryExpression :: Parser Expression
 primaryExpression =
   whitespaceParser
-    *> (  floatParser <|> intParser <|> boolParser <|> sequenceOf' (map charParser "(")
+    *> ( floatParser <|> intParser <|> boolParser <|> sequenceOf' (map charParser "(")
            *> expressionParser
            <* sequenceOf' (map charParser ")")
        )
@@ -735,7 +761,8 @@ Aqui, utilizamos o combinador `choice'` para escolher entre os parsers `ifParser
 ```hs
 runParser anyExpression "41 + 84" -- ParserSuccess {_result = ExprBinary (ExprInt 41) Add (ExprInt 84), _rest = ""}
 runParser anyExpression "if 45 > 10 then 100 + 49 else 67.4 + 23"
--- ParserSuccess {_result = ExprIf (ExprBinary (ExprInt 45) Gt (ExprInt 10)) (ExprBinary (ExprInt 100) Add (ExprInt 49)) (ExprBinary (ExprFloat 67.4) Add (ExprInt 23)), _rest = ""}
+-- ParserSuccess {_result = ExprIf (ExprBinary (ExprInt 45) Gt (ExprInt 10))
+-- (ExprBinary (ExprInt 100) Add (ExprInt 49)) (ExprBinary (ExprFloat 67.4) Add (ExprInt 23)), _rest = ""}
 ```
 
 Utilizando a função que criamos anteriormente para transformar expressões em strings, temos:
