@@ -89,20 +89,43 @@ typedef enum {
 
 typedef struct {
   MaybeTag tag;
-  union {
-    void* nothing;
-    void* just;
-  } value;
+  void* value;
 } Maybe;
 ```
 
-Aqui, precisamos utilizar uma *tag* para indicar qual dos valores está sendo armazenado, e uma *union* para armazenar o valor em si. Isso torna a representação de tipos soma muito mais complicada e propensa a erros. Além disso, não temos as mesmas garantias que temos em linguagens funcionais, como Haskell, onde o compilador garante que todos os casos possíveis são tratados.
+Aqui, precisamos utilizar uma *tag* para indicar qual dos valores está sendo armazenado, e um *void** para armazenar o valor em si. Isso torna a representação de tipos soma muito mais complicada e propensa a erros. Além disso, não temos as mesmas garantias que temos em linguagens funcionais, como Haskell, onde o compilador garante que todos os casos possíveis são tratados.
+
+É importante ressaltar que, apesar de ser possível emular tipos soma em outras linguagens que não possuem tal funcionalidade, essa emulação não se comporta da mesma forma que no Haskell ou outras linguagens funcionais. No exemplo que fizemos em C, nada impede termos uma tag NOTHING, mas guardarmos algum valor em value. Em Haskell, isso nunca seria possível, uma vez que o compilador nos fornece essa garantia.
+
+Outro ponto importante a ressaltar é que a emulação de outros tipos pode se tornar ainda mais complexa e propensa a erros. Veja o caso do tipo `Either` que guarda um entre dois valores:
+
+```hs
+data Either a b = Left a | Right b
+```
+
+Aqui, temos um tipo soma com dois construtores `Left` e `Right`. Podemos emular esse tipo em C da seguinte forma:
+
+```c
+typedef enum {
+  LEFT,
+  RIGHT,
+} EitherTag;
+
+typedef struct {
+  EitherTag tag;
+  union {
+    void* left;
+    void* right;
+  } value;
+} Either;
+```
+Agora, se torna necessário utilizar uma *union*, mas ainda nada nos impede de ter uma tag LEFT e guardar um valor em `right`.
 
 ## Implementando nossa AST
 
 Agora que já temos uma base teórica sobre ADTs, vamos começar a implementar nossa AST. Vamos começar definindo nosso tipo que representará a nossa árvore, e, depois, funções para manipular essa estrutura.
 
-Nossa linguagem fictícia será composta apenas por expressões, ou seja, todas as construções dela retornam um valor. Por simplicidade, vamos inicialmente considerar que nossa linguagem possui apenas números inteiros, números de ponto flutuante, expressões booleanas, operações unárias e binárias e expressões condicionais.
+Nossa linguagem fictícia será composta apenas por expressões, ou seja, todas as construções dela possuem um valor. Por simplicidade, vamos inicialmente considerar que nossa linguagem possui apenas números inteiros, números de ponto flutuante, expressões booleanas, operações unárias e binárias e expressões condicionais.
 
 Ou seja, nesse caso temos seis possíveis construções para nossa linguagem e precisamos criar um único tipo que pode assumir qualquer um desses valores. Para isso, vamos utilizar um tipo soma, que chamaremos de `Expression`:
 
