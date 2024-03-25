@@ -784,4 +784,6 @@ A type class `Functor` define o comportamento de transformação de estruturas, 
 
 Vimos como podemos usar essas type classes para simplificar a implementação de parsers, que são uma aplicação prática de tipos de dados algébricos. Combinando esses conceitos, conseguimos implementar parsers de forma muito mais simples e legível, uma vez que a lógica de aplicação de parsers está encapsulada nas próprias definições das type classes.
 
+A escolha de recriar parser combinators nesse tutorial também foi intencional. Para aqueles mais atentos, podem ter percebido que as operações de combinação de parsers se assemelham muito as operações realizadas em tipos de dados algébricos. Em parser combinators, temos as operações de sequência e de alternância. No mundo dos tipos, seus equivalentes são o produto e a soma. Veja como as operações de sequência e de produto se assemelham: ambas as operações dizem respeito a composição a partir da simultaniedade. Além disso, o comportamento de parser combinators também pode ser muito bem codificado na implementação de type classes muito comuns no Haskell, como visto nos casos de `Functor`, `Applicative`, `Monad` e `Alternative`.
+
 O código completo desse tutorial pode ser encontrado no meu [repositório do GitHub](https://github.com/gtbauke/dgt-haskell/tree/main).
