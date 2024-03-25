@@ -156,7 +156,9 @@ whitespaceParser :: Parser String
 whitespaceParser = zeroOrMore (choice [charParser ' ', charParser '\n', charParser '\t'])
 
 intParser' :: Parser Expression
-intParser' = ExprInt <$> fmap (read :: String -> Int) (oneOrMore (choice (map charParser ['0' .. '9'])))
+intParser' =
+  ExprInt
+    <$> fmap (read :: String -> Int) (oneOrMore (choice (map charParser ['0' .. '9'])))
 
 floatParser' :: Parser Expression
 floatParser' =
@@ -179,16 +181,34 @@ floatParser'' =
         )
 
 boolParser' :: Parser Expression
-boolParser' = ExprBool <$> fmap (== "true") (sequenceOf (map charParser "true") <|> sequenceOf (map charParser "false"))
+boolParser' =
+  ExprBool
+    <$> fmap
+      (== "true")
+      ( sequenceOf (map charParser "true")
+          <|> sequenceOf (map charParser "false")
+      )
 
 orExpression :: Parser Expression
-orExpression = ExprBinary <$> andExpression <*> (Or <$ sequenceOf (map charParser "||")) <*> orExpression <|> andExpression
+orExpression =
+  ExprBinary
+    <$> andExpression
+    <*> (Or <$ sequenceOf (map charParser "||"))
+    <*> orExpression <|> andExpression
 
 andExpression :: Parser Expression
-andExpression = ExprBinary <$> equalityExpression <*> (And <$ sequenceOf (map charParser "&&")) <*> andExpression <|> equalityExpression
+andExpression =
+  ExprBinary
+    <$> equalityExpression
+    <*> (And <$ sequenceOf (map charParser "&&"))
+    <*> andExpression <|> equalityExpression
 
 equalityExpression :: Parser Expression
-equalityExpression = ExprBinary <$> comparisonExpression <*> (Eq <$ sequenceOf (map charParser "==") <|> Neq <$ sequenceOf (map charParser "!=")) <*> equalityExpression <|> comparisonExpression
+equalityExpression =
+  ExprBinary
+    <$> comparisonExpression
+    <*> (Eq <$ sequenceOf (map charParser "==") <|> Neq <$ sequenceOf (map charParser "!="))
+    <*> equalityExpression <|> comparisonExpression
 
 comparisonExpression :: Parser Expression
 comparisonExpression =
@@ -207,13 +227,27 @@ comparisonExpression =
       <|> additionExpression
 
 additionExpression :: Parser Expression
-additionExpression = ExprBinary <$> multiplicationExpression <*> (Add <$ charParser '+' <|> Sub <$ charParser '-') <*> additionExpression <|> multiplicationExpression
+additionExpression =
+  ExprBinary
+    <$> multiplicationExpression
+    <*> (Add <$ charParser '+' <|> Sub <$ charParser '-')
+    <*> additionExpression <|> multiplicationExpression
 
 multiplicationExpression :: Parser Expression
-multiplicationExpression = ExprBinary <$> unaryExpression <*> (Mul <$ charParser '*' <|> Div <$ charParser '/') <*> multiplicationExpression <|> unaryExpression
+multiplicationExpression =
+  ExprBinary
+    <$> unaryExpression
+    <*> (Mul <$ charParser '*' <|> Div <$ charParser '/')
+    <*> multiplicationExpression <|> unaryExpression
 
 unaryExpression :: Parser Expression
-unaryExpression = ExprUnary <$> (Negate <$ charParser '-' <|> Not <$ sequenceOf (map charParser "!")) <*> unaryExpression <|> primaryExpression
+unaryExpression =
+  ExprUnary
+    <$> ( Negate
+            <$ charParser '-' <|> Not
+            <$ sequenceOf (map charParser "!")
+        )
+    <*> unaryExpression <|> primaryExpression
 
 primaryExpression :: Parser Expression
 primaryExpression =
